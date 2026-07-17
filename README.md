@@ -1,87 +1,53 @@
 # CT-200 Document Parser & QA Generator
 
-Backend API system for parsing medical device manuals into structured trees, detecting version changes, and generating QA test cases via LLM.
+## What it does
+Takes PDF manuals for a fictional blood pressure monitor (CardioTrack CT-200), parses them into structured trees, tracks versions, and generates QA test cases from selected sections.
 
-## Quick Start
-
+## How to run
 ```bash
 pip install -r requirements.txt
-
-# Generate test PDFs
 python data/generate_pdfs.py
-
-# Start server
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-
-# Run tests
-python -m pytest tests/ -v
-
-# Run demo
-python demo.py
 ```
+Tests: `python -m pytest tests/ -v`
+Demo: `python demo.py`
 
 ## API Endpoints
-
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/documents` | List all ingested document versions |
-| POST | `/api/documents/ingest` | Ingest a new PDF version |
-| GET | `/api/versions/{id}/sections` | List top-level sections for a version |
-| GET | `/api/nodes/search?q=...` | Full-text search across all nodes |
-| GET | `/api/nodes/{id}` | Get a node and its children |
-| GET | `/api/versions/{v1}/diff/{v2}` | Compare two versions |
-| POST | `/api/selections` | Create a version-pinned node selection |
-| GET | `/api/selections` | List all selections |
-| POST | `/api/generate` | Generate QA test cases (requires LLM key) |
-| GET | `/api/generations/{id}` | Get test cases with staleness check |
+| GET | `/api/documents` | List all versions |
+| POST | `/api/documents/ingest` | Ingest new PDF |
+| GET | `/api/versions/{id}/sections` | Top-level sections |
+| GET | `/api/nodes/search?q=...` | Search nodes |
+| GET | `/api/nodes/{id}` | Get node + children |
+| GET | `/api/versions/{v1}/diff/{v2}` | Diff two versions |
+| POST | `/api/selections` | Create selection |
+| GET | `/api/selections` | List selections |
+| POST | `/api/generate` | Generate test cases |
+| GET | `/api/generations/{id}` | Get test cases + staleness |
 
-## LLM Configuration
-
-Test case generation requires an LLM API key. Set environment variables:
-
+## LLM Setup (optional)
+Works without it — demo mode generates sample test cases. For real LLM:
 ```bash
-# Copy and fill in your key
 cp .env.example .env
-
-# Groq (free tier available)
-LLM_API_KEY=gsk_your_key_here
-LLM_API_URL=https://api.groq.com/openai/v1/chat/completions
-LLM_MODEL=llama-3.1-8b-instant
+# edit .env with your Groq API key
 ```
 
-Without an LLM key, all other features (ingest, browse, diff, selection, staleness) work fully.
-
-## Project Structure
-
+## Project structure
 ```
 app/
-  main.py              # FastAPI app entry point
-  models/
-    database.py        # SQLAlchemy async engine + SQLite
-    models.py          # ORM models + content hash
-    schemas.py         # Pydantic request/response schemas
-  services/
-    parser.py          # PDF parsing with span clustering
-    versioning.py      # Ingest, diff, staleness detection
-    llm.py             # LLM integration + JSON validation
-  routers/
-    documents.py       # Browse API (ingest, sections, search, diff)
-    selections.py      # Selection API (create, list, get)
-    generation.py      # Generation API (generate, retrieve)
-data/
-  generate_pdfs.py     # Creates v1/v2 test PDFs
-  v1-CardioTrack_CT200_Manual.pdf
-  v2-CardioTrack_CT200_Manual.pdf
-tests/
-  test_parser.py       # 17 unit tests
-demo.py                # End-to-end demo script
+  main.py
+  models/     - database.py, models.py, schemas.py
+  services/   - parser.py, versioning.py, llm.py
+  routers/    - documents.py, selections.py, generation.py
+data/         - PDFs + generation script
+tests/        - test_parser.py (17 tests)
+demo.py       - end-to-end demo
 ```
 
-## Key Design Decisions
-
-- **Parser handles 5 irregularities**: duplicate headings, out-of-order sections, multi-line table cells, numbered lists in body text, section numbers with inconsistent formats
-- **Staleness is lazy**: checked at retrieval time by comparing content hashes
-- **Version diff uses title-based matching**: pragmatic for documents with stable section titles
-- **All generated PDFs are in-repo**: no external PDF source files needed
-
-See [APPROACH.md](APPROACH.md) for detailed design rationale.
+## Problems solved
+- Duplicate section headings (4.2 and 7.1 both called "Error Codes")
+- Out of order sections (3.4 appears before 3.3 in the PDF)
+- Multi-line table cells (E2 error row split across 2 lines)
+- Numbered lists in body text getting merged into one blob
+- Staleness detection when document gets updated
