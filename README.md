@@ -1,232 +1,151 @@
 # CT-200 Document Parser & QA Generator
 
-A backend system that parses medical device manuals (PDF) into structured, browsable trees, tracks document versions, detects changes between them, and generates QA test cases using AI.
+ Parses medical device manuals (PDF) into structured data, tracks versions, and generates QA test cases using AI.
 
-Built for the Tri9T AI Engineering Internship Assignment.
+## What is this project about
 
----
+So basically we have a blood pressure monitor called CardioTrack CT-200. It has a user manual as PDF. This project takes that PDF, breaks it into a tree structure (headings, paragraphs, tables, lists), and lets you browse through it via API.
 
-## Problem Statement
+Then when you upload a new version of the manual (like v2), it figures out what changed — which sections were added, removed, or modified.
 
-Medical device documentation changes frequently. When a manual is updated (new error codes, changed specs, added sections), QA testers need to know which test cases are now outdated. This project automates:
+The main thing is it can generate QA test cases from any section using an LLM. And if the document changes after test cases were made, it tells you those test cases are now stale.
 
-1. Parsing unstructured PDF manuals into structured data
-2. Detecting what changed between document versions
-3. Generating test cases from selected sections via LLM
-4. Flagging test cases that became stale after document updates
+## How to run
 
----
-
-## How It Works
-
-```
-PDF Manual v1  ──→  Parse into Tree  ──→  Store in DB
-                         │
-                    Browse / Search
-                         │
-                    Select Section
-                         │
-                    Generate Test Cases (LLM)
-                         │
-PDF Manual v2  ──→  Parse & Diff  ──→  Detect Staleness
-```
-
----
-
-## Setup & Running
-
-### Prerequisites
-- Python 3.8+
-- pip
-
-### Installation
+Clone the repo first:
 ```bash
 git clone https://github.com/JP05-T/ct200-qa-generator.git
 cd ct200-qa-generator
+```
+
+Install dependencies:
+```bash
 pip install -r requirements.txt
 ```
 
-### Generate Test PDFs
+Generate the test PDFs:
 ```bash
 python data/generate_pdfs.py
 ```
-Creates `data/v1-CardioTrack_CT200_Manual.pdf` and `data/v2-CardioTrack_CT200_Manual.pdf`
 
-### Start Server
+Start the server:
 ```bash
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-API docs available at: `http://127.0.0.1:8000/docs`
+You can see the auto-generated docs at `http://127.0.0.1:8000/docs`
 
-### Run Tests
-```bash
-python -m pytest tests/ -v
-```
-17 unit tests covering parser irregularities, table detection, content hashing, and tree structure.
-
-### Run Demo
+To run the demo (does everything automatically):
 ```bash
 python demo.py
 ```
-End-to-end walkthrough: ingest v1 → browse → search → ingest v2 → diff → select → generate test cases.
 
----
-
-## API Reference
-
-### Browse
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/documents` | List all ingested document versions |
-| POST | `/api/documents/ingest?pdf_path=...&description=...` | Ingest a new PDF version |
-| GET | `/api/versions/{id}/sections` | List top-level sections for a version |
-| GET | `/api/nodes/search?q=...` | Full-text search across all nodes |
-| GET | `/api/nodes/{id}` | Get a node with its children |
-| GET | `/api/versions/{v1}/diff/{v2}` | Compare two versions |
-
-### Selection
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/selections` | Create a version-pinned node selection |
-| GET | `/api/selections` | List all selections |
-| GET | `/api/selections/{id}` | Get selection with node details |
-
-### Generation & Retrieval
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/generate` | Generate QA test cases for a selection |
-| GET | `/api/generations/{id}` | Get test cases with staleness check |
-| GET | `/api/selections/{id}/generations` | List all generations for a selection |
-
----
-
-## LLM Configuration
-
-Test case generation works in two modes:
-
-### Demo Mode (no API key needed)
-Uses rule-based keyword matching to generate test cases. Automatically activates when `LLM_API_KEY` is not set.
-
-### Live Mode (Groq API)
+To run tests:
 ```bash
-cp .env.example .env
-# Edit .env and add your Groq API key
+python -m pytest tests/ -v
 ```
 
-Get a free key at: https://console.groq.com/keys
+## API endpoints
 
----
+Browse:
+- `GET /api/documents` — list all versions
+- `POST /api/documents/ingest` — ingest a new PDF
+- `GET /api/versions/{id}/sections` — top level sections
+- `GET /api/nodes/search?q=...` — search nodes
+- `GET /api/nodes/{id}` — get a node with children
+- `GET /api/versions/{v1}/diff/{v2}` — diff two versions
 
-## Project Structure
+Selection:
+- `POST /api/selections` — create a selection
+- `GET /api/selections` — list all selections
+- `GET /api/selections/{id}` — get selection details
+
+Generation:
+- `POST /api/generate` — generate test cases
+- `GET /api/generations/{id}` — get test cases with staleness
+- `GET /api/selections/{id}/generations` — list generations for a selection
+
+## LLM setup
+
+Works without any API key — it has a demo mode that generates sample test cases using keyword matching. If you want real LLM:
+
+```bash
+cp .env.example .env
+```
+Then edit `.env` and add your Groq API key. Get free key at https://console.groq.com/keys
+
+## Project structure
 
 ```
 app/
-  main.py                    FastAPI entry point, router registration
+  main.py              - FastAPI entry point
   models/
-    database.py              SQLAlchemy async engine + SQLite setup
-    models.py                ORM models (DocumentVersion, DocumentNode,
-                             Selection, SelectionNode, Generation)
-    schemas.py               Pydantic request/response schemas
+    database.py        - SQLite connection setup
+    models.py          - database tables (versions, nodes, selections, generations)
+    schemas.py         - request/response formats
   services/
-    parser.py                PDF parsing: span extraction, table detection,
-                             tree construction
-    versioning.py            Ingest, version diff, staleness detection
-    llm.py                   LLM integration, prompt design, JSON validation,
-                             demo mode fallback
+    parser.py          - PDF parsing, table detection, tree building
+    versioning.py      - version diff, staleness detection
+    llm.py             - LLM integration, demo mode
   routers/
-    documents.py             Browse API endpoints
-    selections.py            Selection API endpoints
-    generation.py            Generation + retrieval API endpoints
+    documents.py       - browse endpoints
+    selections.py      - selection endpoints
+    generation.py      - generation endpoints
 data/
-  generate_pdfs.py           Script to create v1/v2 test PDFs
+  generate_pdfs.py     - creates v1 and v2 test PDFs
   v1-CardioTrack_CT200_Manual.pdf
   v2-CardioTrack_CT200_Manual.pdf
 tests/
-  test_parser.py             17 unit tests
-demo.py                      End-to-end demo script
-requirements.txt             Python dependencies
+  test_parser.py       - 17 unit tests
+demo.py                - end to end demo
+requirements.txt
 README.md
-APPROACH.md                  Design decisions and trade-offs
-.env.example                 Environment variable template
+APPROACH.md
+.env.example
 ```
 
----
+## Database tables
 
-## Database Schema
+- **DocumentVersion** — stores each PDF version (v1, v2, etc.)
+- **DocumentNode** — every section/paragraph/table as a node with parent_id for tree structure, content_hash for staleness
+- **Selection** — user picks nodes from a specific version
+- **SelectionNode** — links selection to nodes
+- **Generation** — stores generated test cases with hash at generation time, is_stale flag
 
-```
-DocumentVersion
-  ├── id, version_number, source_file, description, created_at
-  └── has many DocumentNodes
+## Problems I ran into and fixed
 
-DocumentNode
-  ├── id, version_id, parent_id (self-referencing FK)
-  ├── node_type (heading/paragraph/table/numbered_list/section)
-  ├── title, section_number, heading_level, body_text
-  ├── content_hash (SHA-256 truncated, for staleness detection)
-  └── page_number
+- PDFs from fpdf2 have individual text spans, not actual table elements — so had to cluster x/y positions to detect tables
+- "Error Codes" heading appears twice (section 4.2 and 7.1) — used section numbers to differentiate
+- Section 3.4 appears before 3.3 in the PDF — kept document order instead of sorting by section number
+- E2 error row text wraps to next line — added continuation detection based on first column pattern
+- Numbered list items (1. Normal, 2. Elevated, etc.) were getting merged into one paragraph — added check before paragraph merging
+- Content hashes were different for same text due to whitespace — added normalization
 
-Selection
-  ├── id, name, version_id
-  └── has many SelectionNodes (links to DocumentNodes)
+## Staleness detection
 
-Generation
-  ├── id, selection_id, node_id, node_version_id
-  ├── content_hash_at_generation (hash when test cases were created)
-  ├── test_cases (JSON), model_used
-  └── is_stale (updated on retrieval via hash comparison)
-```
-
----
-
-## Parser Irregularities Handled
-
-| Irregularity | Example | How it's handled |
-|-------------|---------|-----------------|
-| Duplicate headings | "4.2 Error Codes" and "7.1 Error Codes" | Section numbers used as unique identifiers |
-| Out-of-order sections | 3.4 appears before 3.3 in PDF | Document order preserved, not sorted by number |
-| Multi-line table cells | E2 error row split across 2 lines | Y-coordinate based continuation detection |
-| Numbered lists in body text | "1. Normal: systolic < 120..." | Regex detection prevents paragraph merging |
-| Inconsistent heading formats | "1. Title" vs "2.1 Title" | Flexible regex handles both patterns |
-
----
-
-## Staleness Detection Flow
-
-```
 1. User selects section from v1
-2. User generates test cases → stored with content_hash_at_generation
-3. v2 is ingested → node content changes → new content_hash
+2. Test cases generated → stored with content hash
+3. v2 ingested → section content changes → new hash
 4. User retrieves test cases → system compares hashes
-5. If hashes differ → is_stale = true → test cases need regeneration
-```
+5. Hashes different → is_stale = true → needs regeneration
 
----
+## Tests
 
-## Test Coverage
-
-17 unit tests in `tests/test_parser.py`:
-
-- Heading detection (section numbers, subsections, non-headings)
-- Duplicate heading produces separate tree nodes
-- Out-of-order sections preserved in document order
-- Content hash with whitespace normalization
-- Table detection (specs table, error codes table, v2 with E6)
+17 unit tests in `tests/test_parser.py` covering:
+- Heading detection
+- Duplicate headings as separate nodes
+- Out of order sections
+- Content hash normalization
+- Table detection (specs, error codes, v2 with E6)
 - Node types (headings, paragraphs, tables, numbered lists)
 
----
+## Tech used
 
-## Tech Stack
-
-- **Python 3.8** — language
-- **FastAPI** — async web framework
-- **SQLAlchemy + aiosqlite** — async ORM with SQLite
-- **PyMuPDF (fitz)** — PDF text extraction
-- **fpdf2** — PDF generation (test documents)
-- **httpx** — async HTTP client for LLM API
-- **Groq API / Llama 3.1 8B** — LLM for test case generation
-- **pytest** — testing framework
+- Python 3.8
+- FastAPI (web framework)
+- SQLAlchemy + SQLite (database)
+- PyMuPDF (PDF reading)
+- fpdf2 (PDF writing)
+- httpx (HTTP calls to LLM)
+- Groq API + Llama 3.1 8B (test case generation)
+- pytest (testing)
