@@ -45,10 +45,24 @@ async def generate_test_cases_for_selection(
     existing = existing_gen.scalar_one_or_none()
 
     combined_content = ""
+
+    async def gather_content(node: DocumentNode, depth: int = 0):
+        prefix = "#" * min(depth + 2, 4)
+        combined_content = f"\n\n{prefix} {node.title or node.node_type}\n"
+        if node.section_number:
+            combined_content += f"Section: {node.section_number}\n"
+        if node.body_text:
+            combined_content += node.body_text + "\n"
+
+        child_result = await db.execute(
+            select(DocumentNode).where(DocumentNode.parent_id == node.id)
+        )
+        for child in child_result.scalars().all():
+            combined_content += await gather_content(child, depth + 1)
+        return combined_content
+
     for node in nodes:
-        combined_content += f"\n\n## {node.title or 'Untitled'}\n"
-        combined_content += f"Section: {node.section_number}\n"
-        combined_content += node.body_text or ""
+        combined_content += await gather_content(node)
 
     result = await generate_test_cases(
         section_title=selection.name,
